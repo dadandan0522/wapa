@@ -2,34 +2,69 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>海戦シューティング</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>海STG</title>
 <style>
-body { margin:0; background:black; }
-canvas { display:block; margin:auto; background:#001a33; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #001a33;
+}
+canvas {
+  display: block;
+}
+
+/* 自機 */
+.player {
+  width: 40px;
+  height: 40px;
+}
+
+/* 敵（小型戦艦） */
+.enemy {
+  width: 30px;
+  height: 30px;
+}
+
+/* ボス（戦艦） */
+.boss {
+  width: 120px;
+  height: 60px;
+}
 </style>
 </head>
 <body>
-
-<canvas id="game" width="400" height="600"></canvas>
+<canvas id="game"></canvas>
 
 <script>
+/* ===== Canvas ===== */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-/* ===== 状態 ===== */
+/* ===== Audio ===== */
+const bgm = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_2c4b8a1e5b.mp3");
+bgm.loop = true;
+bgm.volume = 0.4;
+
+const seShot = new Audio("https://cdn.pixabay.com/audio/2022/03/10/audio_8fbe7f90b2.mp3");
+const seExplosion = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_7b6d7bbf48.mp3");
+
+/* ===== Game State ===== */
+let gameOver = false;
 let score = 0;
 let enemiesKilled = 0;
-let gameOver = false;
-let invincible = 0;
-let bossLevel = 1;
-let bgY = 0;
+let bossLevel = 0;
 
-/* ===== プレイヤー ===== */
+/* ===== Player ===== */
 const player = {
-  x: 180, y: 500, w: 40, h: 50,
-  life: 3,
-  weapon: 1
+  x: canvas.width / 2,
+  y: canvas.height - 100,
+  size: 20,
+  life: 5,
+  weaponLevel: 1,
+  cooldown: 0,
+  invincible: 0
 };
 
 let bullets = [];
@@ -38,262 +73,205 @@ let enemyBullets = [];
 let items = [];
 let boss = null;
 
-/* ===== リスタート ===== */
-function restart() {
-  score = 0;
-  enemiesKilled = 0;
-  bossLevel = 1;
-  bullets = [];
-  enemies = [];
-  enemyBullets = [];
-  items = [];
-  boss = null;
-  player.life = 3;
-  player.weapon = 1;
-  invincible = 0;
-  gameOver = false;
-}
-
-/* ===== マウス操作（移動） ===== */
+/* ===== Mouse Control ===== */
 canvas.addEventListener("mousemove", e => {
-  const rect = canvas.getBoundingClientRect();
-  player.x = e.clientX - rect.left - player.w / 2;
-  player.x = Math.max(0, Math.min(360, player.x));
+  player.x = e.clientX;
+  player.y = e.clientY;
 });
 
-/* ===== スマホ移動 ===== */
-canvas.addEventListener("touchmove", e => {
-  const rect = canvas.getBoundingClientRect();
-  player.x = e.touches[0].clientX - rect.left - player.w / 2;
-  player.x = Math.max(0, Math.min(360, player.x));
-});
+canvas.addEventListener("mousedown", () => shoot());
 
-/* ===== 発射（連射制限） ===== */
-let shootCool = 0;
+/* ===== Shoot ===== */
 function shoot() {
-  if (shootCool > 0 || gameOver) return;
-  shootCool = 15;
+  if (player.cooldown > 0 || gameOver) return;
 
-  if (player.weapon === 1) {
-    bullets.push({ x: player.x + 20, y: player.y, power: 1 });
-  } else if (player.weapon === 2) {
-    bullets.push({ x: player.x + 8, y: player.y, power: 1 });
-    bullets.push({ x: player.x + 32, y: player.y, power: 1 });
-  } else {
-    bullets.push({ x: player.x + 20, y: player.y, power: 2 });
-    bullets.push({ x: player.x + 5,  y: player.y, power: 1 });
-    bullets.push({ x: player.x + 35, y: player.y, power: 1 });
-  }
-}
+  seShot.cloneNode().play();
 
-/* ===== クリック操作 ===== */
-canvas.addEventListener("mousedown", () => {
-  if (gameOver) restart();
-  else shoot();
-});
-canvas.addEventListener("touchstart", () => {
-  if (gameOver) restart();
-  else shoot();
-});
-
-/* ===== 敵生成 ===== */
-setInterval(() => {
-  if (!boss && !gameOver) {
-    enemies.push({
-      x: Math.random() * 350,
-      y: -40,
-      w: 30,
-      h: 30,
-      cool: 60
+  for (let i = 0; i < player.weaponLevel; i++) {
+    bullets.push({
+      x: player.x + (i - player.weaponLevel / 2) * 8,
+      y: player.y,
+      vx: (i - (player.weaponLevel - 1) / 2) * 1.2,
+      vy: -8
     });
   }
-}, 800);
+  player.cooldown = 10;
+}
 
-/* ===== 更新 ===== */
+/* ===== Enemy Spawn ===== */
+function spawnEnemy() {
+  if (boss || gameOver) return;
+  enemies.push({
+    x: Math.random() * canvas.width,
+    y: -30,
+    hp: 2
+  });
+}
+
+/* ===== Boss Spawn ===== */
+function spawnBoss() {
+  bossLevel++;
+  boss = {
+    x: canvas.width / 2,
+    y: 80,
+    hp: 30 + bossLevel * 20,
+    maxHp: 30 + bossLevel * 20,
+    cooldown: 0
+  };
+}
+
+/* ===== Restart ===== */
+window.addEventListener("keydown", e => {
+  if (e.key === "r") location.reload();
+});
+
+/* ===== Update ===== */
 function update() {
   if (gameOver) return;
 
-  bgY = (bgY + 1) % 600;
-  shootCool--;
-  invincible--;
+  if (!bgm.paused) {} else bgm.play();
 
-  bullets.forEach(b => b.y -= 8);
-  bullets = bullets.filter(b => b.y > 0);
+  player.cooldown--;
+  player.invincible--;
 
+  /* Player Bullets */
+  bullets.forEach(b => {
+    b.x += b.vx;
+    b.y += b.vy;
+  });
+  bullets = bullets.filter(b => b.y > -50);
+
+  /* Enemies */
+  enemies.forEach(e => e.y += 2);
+
+  /* Enemy Bullets */
   enemyBullets.forEach(b => {
-    b.y += b.dy;
-    b.x += b.dx || 0;
+    b.x += b.vx;
+    b.y += b.vy;
   });
-  enemyBullets = enemyBullets.filter(b => b.y < 600 && b.x>-10 && b.x<410);
+  enemyBullets = enemyBullets.filter(b => b.y < canvas.height + 50);
 
-  enemies.forEach(e => {
-    e.y += 2;
-    e.cool--;
-    if (e.cool <= 0) {
-      enemyBullets.push({ x:e.x+15, y:e.y+30, dy:4 });
-      e.cool = 80;
-    }
-  });
-
-  /* 敵撃破＋アイテム */
-  enemies.forEach((e,ei)=>{
-    bullets.forEach((b,bi)=>{
-      if(b.x>e.x && b.x<e.x+e.w && b.y>e.y && b.y<e.y+e.h){
-        enemies.splice(ei,1);
-        bullets.splice(bi,1);
-        score += 10;
-        enemiesKilled++;
-
-        const r = Math.random();
-        if (r < 0.15) {
-          items.push({ x:e.x+10, y:e.y, type:"weapon" });
-        } else if (r < 0.25) {
-          items.push({ x:e.x+10, y:e.y, type:"life" });
+  /* Collision: Bullet vs Enemy */
+  bullets.forEach(b => {
+    enemies.forEach(e => {
+      if (Math.hypot(b.x - e.x, b.y - e.y) < 20) {
+        e.hp--;
+        b.y = -999;
+        if (e.hp <= 0) {
+          score += 100;
+          enemiesKilled++;
+          seExplosion.cloneNode().play();
+          e.y = canvas.height + 999;
         }
       }
     });
   });
 
-  /* ボス出現 */
+  enemies = enemies.filter(e => e.y < canvas.height);
+
+  /* Boss Logic */
   if (enemiesKilled >= 20 && !boss) {
-    boss = {
-      x: 80, y: 40, w: 240, h: 90,
-      life: 30 + bossLevel * 20,
-      cool: 0
-    };
-    enemies = [];
+    enemiesKilled = 0;
+    spawnBoss();
   }
 
-  /* ボス処理 */
   if (boss) {
-    boss.cool--;
-    if (boss.cool <= 0) {
-      for(let i=-2;i<=2;i++){
+    boss.cooldown--;
+    if (boss.cooldown <= 0) {
+      for (let i = -2; i <= 2; i++) {
         enemyBullets.push({
-          x: boss.x + boss.w/2,
-          y: boss.y + boss.h,
-          dx: i,
-          dy: 3 + bossLevel
+          x: boss.x,
+          y: boss.y,
+          vx: i * 1.2,
+          vy: 4
         });
       }
-      boss.cool = 40;
+      boss.cooldown = 40;
     }
 
-    bullets.forEach((b,bi)=>{
-      if(b.x>boss.x && b.x<boss.x+boss.w && b.y>boss.y && b.y<boss.y+boss.h){
-        bullets.splice(bi,1);
-        boss.life -= b.power;
-        score += 5;
-        if(boss.life <= 0){
-          boss = null;
-          enemiesKilled = 0;
-          bossLevel++;
-        }
+    bullets.forEach(b => {
+      if (Math.abs(b.x - boss.x) < 80 && Math.abs(b.y - boss.y) < 40) {
+        boss.hp--;
+        b.y = -999;
       }
     });
+
+    if (boss.hp <= 0) {
+      score += 2000;
+      seExplosion.cloneNode().play();
+      boss = null;
+    }
   }
 
-  /* 被弾 */
-  enemyBullets.forEach((b,bi)=>{
-    if(invincible<=0 &&
-       b.x>player.x && b.x<player.x+player.w &&
-       b.y>player.y && b.y<player.y+player.h){
-      enemyBullets.splice(bi,1);
+  /* Player Hit */
+  enemyBullets.forEach(b => {
+    if (
+      Math.hypot(b.x - player.x, b.y - player.y) < 15 &&
+      player.invincible <= 0
+    ) {
       player.life--;
-      player.weapon = Math.max(1, player.weapon-1);
-      invincible = 60;
-      if(player.life<=0) gameOver = true;
-    }
-  });
-
-  /* アイテム取得 */
-  items.forEach(i => i.y += 2);
-  items.forEach((i,ii)=>{
-    if(i.x>player.x && i.x<player.x+40 && i.y>player.y && i.y<player.y+40){
-      if(i.type === "weapon"){
-        player.weapon = Math.min(3, player.weapon + 1);
-      }
-      if(i.type === "life"){
-        player.life = Math.min(3, player.life + 1);
-      }
-      items.splice(ii,1);
+      player.weaponLevel = Math.max(1, player.weaponLevel - 1);
+      player.invincible = 60;
+      if (player.life <= 0) gameOver = true;
     }
   });
 }
 
-/* ===== 描画 ===== */
+/* ===== Draw ===== */
 function draw() {
-  ctx.clearRect(0,0,400,600);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  /* 海背景 */
-  ctx.fillStyle="#003366";
-  ctx.fillRect(0,bgY,400,600);
-  ctx.fillRect(0,bgY-600,400,600);
+  /* Player */
+  ctx.fillStyle = player.invincible > 0 ? "rgba(0,255,255,0.5)" : "#00ffff";
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y - 20);
+  ctx.lineTo(player.x - 15, player.y + 20);
+  ctx.lineTo(player.x + 15, player.y + 20);
+  ctx.fill();
 
-  /* 自機（無敵点滅） */
-  if(invincible%10<5){
-    ctx.fillStyle="cyan";
-    ctx.fillRect(player.x+15,player.y,10,50);
-    ctx.fillRect(player.x,player.y+20,40,20);
+  /* Bullets */
+  ctx.fillStyle = "#ffff00";
+  bullets.forEach(b => ctx.fillRect(b.x, b.y, 4, 8));
+
+  /* Enemies */
+  ctx.fillStyle = "#aaa";
+  enemies.forEach(e => ctx.fillRect(e.x - 15, e.y - 15, 30, 30));
+
+  /* Enemy Bullets */
+  ctx.fillStyle = "#ff4444";
+  enemyBullets.forEach(b => ctx.fillRect(b.x, b.y, 6, 6));
+
+  /* Boss */
+  if (boss) {
+    ctx.fillStyle = "#666";
+    ctx.fillRect(boss.x - 60, boss.y - 30, 120, 60);
+
+    /* Boss HP */
+    ctx.fillStyle = "#f00";
+    ctx.fillRect(50, 20, (boss.hp / boss.maxHp) * 300, 10);
   }
-
-  /* 自機弾 */
-  ctx.fillStyle="lime";
-  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,14));
-
-  /* 敵弾 */
-  ctx.fillStyle="orange";
-  enemyBullets.forEach(b=>ctx.fillRect(b.x-3,b.y,6,12));
-
-  /* 敵 */
-  ctx.fillStyle="gray";
-  enemies.forEach(e=>{
-    ctx.fillRect(e.x+10,e.y,10,30);
-    ctx.fillRect(e.x,e.y+10,30,20);
-  });
-
-  /* ボス */
-  if(boss){
-    ctx.fillStyle="darkred";
-    ctx.fillRect(boss.x,boss.y,boss.w,boss.h);
-    ctx.fillStyle="white";
-    ctx.fillText("BOSS HP:"+boss.life,boss.x+70,boss.y-5);
-  }
-
-  /* アイテム */
-  items.forEach(i=>{
-    if(i.type==="weapon"){
-      ctx.fillStyle="lime";
-      ctx.fillRect(i.x,i.y,10,10);
-    } else {
-      ctx.fillStyle="green";
-      ctx.fillRect(i.x+4,i.y,4,12);
-      ctx.fillRect(i.x,i.y+4,12,4);
-    }
-  });
 
   /* UI */
-  ctx.fillStyle="white";
-  ctx.fillText("SCORE: "+score,10,20);
-  ctx.fillText("LIFE: "+player.life,10,40);
-  ctx.fillText("WEAPON: "+player.weapon,10,60);
+  ctx.fillStyle = "#fff";
+  ctx.fillText("SCORE: " + score, 20, canvas.height - 20);
+  ctx.fillText("LIFE: " + player.life, 150, canvas.height - 20);
 
-  if(gameOver){
-    ctx.font="28px sans-serif";
-    ctx.fillText("GAME OVER",90,300);
-    ctx.font="16px sans-serif";
-    ctx.fillText("CLICK TO RESTART",115,330);
+  if (gameOver) {
+    ctx.fillStyle = "red";
+    ctx.font = "40px sans-serif";
+    ctx.fillText("GAME OVER (Rで再開)", canvas.width / 2 - 200, canvas.height / 2);
   }
 }
 
-/* ===== ループ ===== */
-function loop(){
+/* ===== Loop ===== */
+setInterval(spawnEnemy, 800);
+function loop() {
   update();
   draw();
   requestAnimationFrame(loop);
 }
 loop();
 </script>
-
 </body>
 </html>
+
