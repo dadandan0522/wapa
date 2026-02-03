@@ -3,33 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <title>海STG</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-body {
-  margin: 0;
-  overflow: hidden;
-  background: #001a33;
-}
-canvas {
-  display: block;
-}
-
-/* 自機 */
-.player {
-  width: 40px;
-  height: 40px;
-}
-
-/* 敵（小型戦艦） */
-.enemy {
-  width: 30px;
-  height: 30px;
-}
-
-/* ボス（戦艦） */
-.boss {
-  width: 120px;
-  height: 60px;
-}
+body{margin:0;overflow:hidden;background:#001a33}
+canvas{display:block}
 </style>
 </head>
 <body>
@@ -39,239 +16,229 @@ canvas {
 /* ===== Canvas ===== */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+canvas.width = innerWidth;
+canvas.height = innerHeight;
 
 /* ===== Audio ===== */
 const bgm = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_2c4b8a1e5b.mp3");
-bgm.loop = true;
-bgm.volume = 0.4;
-
+bgm.loop = true; bgm.volume = 0.4;
 const seShot = new Audio("https://cdn.pixabay.com/audio/2022/03/10/audio_8fbe7f90b2.mp3");
-const seExplosion = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_7b6d7bbf48.mp3");
+const seBoom = new Audio("https://cdn.pixabay.com/audio/2022/03/15/audio_7b6d7bbf48.mp3");
 
-/* ===== Game State ===== */
-let gameOver = false;
-let score = 0;
-let enemiesKilled = 0;
-let bossLevel = 0;
+/* ===== State ===== */
+let gameOver=false, score=0, time=0;
+let killCount=0, boss=null, bossPhase=0;
+let enemies=[], bullets=[], enemyBullets=[], items=[];
 
 /* ===== Player ===== */
-const player = {
-  x: canvas.width / 2,
-  y: canvas.height - 100,
-  size: 20,
-  life: 5,
-  weaponLevel: 1,
-  cooldown: 0,
-  invincible: 0
+const player={
+  x:canvas.width/2, y:canvas.height-120,
+  life:5, weapon:1, cool:0, inv:0
 };
 
-let bullets = [];
-let enemies = [];
-let enemyBullets = [];
-let items = [];
-let boss = null;
-
-/* ===== Mouse Control ===== */
-canvas.addEventListener("mousemove", e => {
-  player.x = e.clientX;
-  player.y = e.clientY;
+/* ===== Mouse ===== */
+canvas.addEventListener("mousemove",e=>{
+  player.x=e.clientX;
+  player.x=Math.max(20,Math.min(canvas.width-20,player.x));
 });
-
-canvas.addEventListener("mousedown", () => shoot());
+canvas.addEventListener("mousedown",()=>gameOver?location.reload():shoot());
 
 /* ===== Shoot ===== */
-function shoot() {
-  if (player.cooldown > 0 || gameOver) return;
-
+function shoot(){
+  if(player.cool>0||gameOver)return;
   seShot.cloneNode().play();
-
-  for (let i = 0; i < player.weaponLevel; i++) {
+  for(let i=0;i<player.weapon;i++){
     bullets.push({
-      x: player.x + (i - player.weaponLevel / 2) * 8,
-      y: player.y,
-      vx: (i - (player.weaponLevel - 1) / 2) * 1.2,
-      vy: -8
+      x:player.x+(i-(player.weapon-1)/2)*10,
+      y:player.y, vx:(i-(player.weapon-1)/2), vy:-8
     });
   }
-  player.cooldown = 10;
+  player.cool=8;
 }
 
 /* ===== Enemy Spawn ===== */
-function spawnEnemy() {
-  if (boss || gameOver) return;
+function spawnEnemy(){
+  if(boss||gameOver)return;
+  const type=Math.random()<0.6?0:1;
   enemies.push({
-    x: Math.random() * canvas.width,
-    y: -30,
-    hp: 2
+    x:Math.random()*canvas.width, y:-40,
+    hp:type?5:2, type:type,
+    cool:60+Math.random()*60
   });
 }
 
-/* ===== Boss Spawn ===== */
-function spawnBoss() {
-  bossLevel++;
-  boss = {
-    x: canvas.width / 2,
-    y: 80,
-    hp: 30 + bossLevel * 20,
-    maxHp: 30 + bossLevel * 20,
-    cooldown: 0
+/* ===== Boss ===== */
+function spawnBoss(){
+  bossPhase++;
+  boss={
+    x:canvas.width/2,y:80,
+    hp:100*bossPhase,max:100*bossPhase,
+    cool:0, pattern:0
   };
 }
 
-/* ===== Restart ===== */
-window.addEventListener("keydown", e => {
-  if (e.key === "r") location.reload();
-});
-
 /* ===== Update ===== */
-function update() {
-  if (gameOver) return;
+function update(){
+  if(gameOver)return;
+  if(bgm.paused)bgm.play();
+  time++;
 
-  if (!bgm.paused) {} else bgm.play();
+  player.cool--; player.inv--;
 
-  player.cooldown--;
-  player.invincible--;
+  /* Difficulty */
+  const diff=1+time/1800+score/5000;
 
   /* Player Bullets */
-  bullets.forEach(b => {
-    b.x += b.vx;
-    b.y += b.vy;
-  });
-  bullets = bullets.filter(b => b.y > -50);
+  bullets.forEach(b=>{b.x+=b.vx;b.y+=b.vy});
+  bullets=bullets.filter(b=>b.y>-50);
 
   /* Enemies */
-  enemies.forEach(e => e.y += 2);
+  enemies.forEach(e=>{
+    e.y+=2*diff;
+    e.cool--;
+    if(e.cool<=0){
+      const dx=player.x-e.x,dy=player.y-e.y;
+      const l=Math.hypot(dx,dy);
+      enemyBullets.push({x:e.x,y:e.y,vx:dx/l*3,vy:dy/l*3});
+      e.cool=80;
+    }
+  });
+  enemies=enemies.filter(e=>e.y<canvas.height+50&&e.hp>0);
 
   /* Enemy Bullets */
-  enemyBullets.forEach(b => {
-    b.x += b.vx;
-    b.y += b.vy;
-  });
-  enemyBullets = enemyBullets.filter(b => b.y < canvas.height + 50);
+  enemyBullets.forEach(b=>{b.x+=b.vx;b.y+=b.vy});
+  enemyBullets=enemyBullets.filter(b=>b.y>-50&&b.y<canvas.height+50);
 
-  /* Collision: Bullet vs Enemy */
-  bullets.forEach(b => {
-    enemies.forEach(e => {
-      if (Math.hypot(b.x - e.x, b.y - e.y) < 20) {
-        e.hp--;
-        b.y = -999;
-        if (e.hp <= 0) {
-          score += 100;
-          enemiesKilled++;
-          seExplosion.cloneNode().play();
-          e.y = canvas.height + 999;
+  /* Hit Enemy */
+  bullets.forEach(b=>{
+    enemies.forEach(e=>{
+      if(Math.hypot(b.x-e.x,b.y-e.y)<20){
+        e.hp--; b.y=-999;
+        if(e.hp<=0){
+          score+=100; killCount++;
+          if(Math.random()<0.15) items.push({x:e.x,y:e.y});
+          seBoom.cloneNode().play();
         }
       }
     });
   });
 
-  enemies = enemies.filter(e => e.y < canvas.height);
+  /* Boss Spawn */
+  if(killCount>=20&&!boss){killCount=0;spawnBoss();}
 
   /* Boss Logic */
-  if (enemiesKilled >= 20 && !boss) {
-    enemiesKilled = 0;
-    spawnBoss();
-  }
-
-  if (boss) {
-    boss.cooldown--;
-    if (boss.cooldown <= 0) {
-      for (let i = -2; i <= 2; i++) {
+  if(boss){
+    boss.cool--;
+    if(boss.cool<=0){
+      boss.pattern=(boss.pattern+1)%3;
+      boss.cool=120;
+    }
+    if(boss.pattern===0){
+      for(let i=-2;i<=2;i++)
+        enemyBullets.push({x:boss.x,y:boss.y,vx:i*1.5,vy:4});
+    }
+    if(boss.pattern===1){
+      for(let a=0;a<360;a+=30){
         enemyBullets.push({
-          x: boss.x,
-          y: boss.y,
-          vx: i * 1.2,
-          vy: 4
+          x:boss.x,y:boss.y,
+          vx:Math.cos(a*Math.PI/180)*3,
+          vy:Math.sin(a*Math.PI/180)*3
         });
       }
-      boss.cooldown = 40;
+    }
+    if(boss.pattern===2){
+      const dx=player.x-boss.x,dy=player.y-boss.y;
+      const l=Math.hypot(dx,dy);
+      enemyBullets.push({x:boss.x,y:boss.y,vx:dx/l*5,vy:dy/l*5});
     }
 
-    bullets.forEach(b => {
-      if (Math.abs(b.x - boss.x) < 80 && Math.abs(b.y - boss.y) < 40) {
-        boss.hp--;
-        b.y = -999;
+    bullets.forEach(b=>{
+      if(Math.abs(b.x-boss.x)<70&&Math.abs(b.y-boss.y)<40){
+        boss.hp--; b.y=-999;
       }
     });
 
-    if (boss.hp <= 0) {
-      score += 2000;
-      seExplosion.cloneNode().play();
-      boss = null;
+    if(boss.hp<=0){
+      score+=3000; boss=null;
+      seBoom.cloneNode().play();
     }
   }
 
   /* Player Hit */
-  enemyBullets.forEach(b => {
-    if (
-      Math.hypot(b.x - player.x, b.y - player.y) < 15 &&
-      player.invincible <= 0
-    ) {
-      player.life--;
-      player.weaponLevel = Math.max(1, player.weaponLevel - 1);
-      player.invincible = 60;
-      if (player.life <= 0) gameOver = true;
+  enemyBullets.forEach(b=>{
+    if(Math.hypot(b.x-player.x,b.y-player.y)<15&&player.inv<=0){
+      player.life--; player.weapon=Math.max(1,player.weapon-1);
+      player.inv=60;
+      if(player.life<=0)gameOver=true;
     }
+  });
+
+  /* Items */
+  items.forEach(it=>it.y+=2);
+  items=items.filter(it=>{
+    if(Math.hypot(it.x-player.x,it.y-player.y)<20){
+      player.weapon=Math.min(5,player.weapon+1);
+      player.life=Math.min(5,player.life+1);
+      return false;
+    }
+    return it.y<canvas.height;
   });
 }
 
 /* ===== Draw ===== */
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
   /* Player */
-  ctx.fillStyle = player.invincible > 0 ? "rgba(0,255,255,0.5)" : "#00ffff";
+  ctx.fillStyle=player.inv>0?"rgba(0,255,255,0.5)":"#0ff";
   ctx.beginPath();
-  ctx.moveTo(player.x, player.y - 20);
-  ctx.lineTo(player.x - 15, player.y + 20);
-  ctx.lineTo(player.x + 15, player.y + 20);
+  ctx.moveTo(player.x,player.y-20);
+  ctx.lineTo(player.x-15,player.y+20);
+  ctx.lineTo(player.x+15,player.y+20);
   ctx.fill();
 
   /* Bullets */
-  ctx.fillStyle = "#ffff00";
-  bullets.forEach(b => ctx.fillRect(b.x, b.y, 4, 8));
+  ctx.fillStyle="#ff0";
+  bullets.forEach(b=>ctx.fillRect(b.x,b.y,4,8));
 
   /* Enemies */
-  ctx.fillStyle = "#aaa";
-  enemies.forEach(e => ctx.fillRect(e.x - 15, e.y - 15, 30, 30));
+  enemies.forEach(e=>{
+    ctx.fillStyle=e.type?"#888":"#aaa";
+    ctx.fillRect(e.x-15,e.y-15,30,30);
+  });
 
   /* Enemy Bullets */
-  ctx.fillStyle = "#ff4444";
-  enemyBullets.forEach(b => ctx.fillRect(b.x, b.y, 6, 6));
+  ctx.fillStyle="#f44";
+  enemyBullets.forEach(b=>ctx.fillRect(b.x,b.y,6,6));
 
   /* Boss */
-  if (boss) {
-    ctx.fillStyle = "#666";
-    ctx.fillRect(boss.x - 60, boss.y - 30, 120, 60);
-
-    /* Boss HP */
-    ctx.fillStyle = "#f00";
-    ctx.fillRect(50, 20, (boss.hp / boss.maxHp) * 300, 10);
+  if(boss){
+    ctx.fillStyle="#555";
+    ctx.fillRect(boss.x-80,boss.y-30,160,60);
+    ctx.fillStyle="red";
+    ctx.fillRect(20,20,(boss.hp/boss.max)*300,10);
   }
 
-  /* UI */
-  ctx.fillStyle = "#fff";
-  ctx.fillText("SCORE: " + score, 20, canvas.height - 20);
-  ctx.fillText("LIFE: " + player.life, 150, canvas.height - 20);
+  /* Items */
+  ctx.fillStyle="#0f0";
+  items.forEach(it=>ctx.fillRect(it.x-6,it.y-6,12,12));
 
-  if (gameOver) {
-    ctx.fillStyle = "red";
-    ctx.font = "40px sans-serif";
-    ctx.fillText("GAME OVER (Rで再開)", canvas.width / 2 - 200, canvas.height / 2);
+  /* UI */
+  ctx.fillStyle="#fff";
+  ctx.fillText(`SCORE ${score}`,20,canvas.height-20);
+  ctx.fillText(`LIFE ${player.life}`,140,canvas.height-20);
+  ctx.fillText(`WEAPON Lv${player.weapon}`,240,canvas.height-20);
+
+  if(gameOver){
+    ctx.font="40px sans-serif";
+    ctx.fillText("GAME OVER (CLICK)",canvas.width/2-200,canvas.height/2);
   }
 }
 
 /* ===== Loop ===== */
-setInterval(spawnEnemy, 800);
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
+setInterval(spawnEnemy,800);
+function loop(){update();draw();requestAnimationFrame(loop);}
 loop();
 </script>
 </body>
 </html>
-
