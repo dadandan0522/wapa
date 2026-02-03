@@ -5,7 +5,7 @@
 <title>海戦シューティング</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body { margin:0; background:#000; }
+body { margin:0; background:black; }
 canvas { display:block; margin:auto; background:#001a33; }
 </style>
 </head>
@@ -23,8 +23,6 @@ let enemiesKilled = 0;
 let gameOver = false;
 let invincible = 0;
 let bossLevel = 1;
-
-/* ===== 背景（海） ===== */
 let bgY = 0;
 
 /* ===== プレイヤー ===== */
@@ -40,15 +38,6 @@ let enemyBullets = [];
 let items = [];
 let boss = null;
 
-/* ===== 入力 ===== */
-const keys = {};
-document.addEventListener("keydown", e => keys[e.code] = true);
-document.addEventListener("keyup", e => keys[e.code] = false);
-canvas.addEventListener("touchmove", e => {
-  const r = canvas.getBoundingClientRect();
-  player.x = e.touches[0].clientX - r.left - player.w/2;
-});
-
 /* ===== リスタート ===== */
 function restart() {
   score = 0;
@@ -61,8 +50,23 @@ function restart() {
   boss = null;
   player.life = 3;
   player.weapon = 1;
+  invincible = 0;
   gameOver = false;
 }
+
+/* ===== マウス操作（移動） ===== */
+canvas.addEventListener("mousemove", e => {
+  const rect = canvas.getBoundingClientRect();
+  player.x = e.clientX - rect.left - player.w / 2;
+  player.x = Math.max(0, Math.min(360, player.x));
+});
+
+/* ===== スマホ移動 ===== */
+canvas.addEventListener("touchmove", e => {
+  const rect = canvas.getBoundingClientRect();
+  player.x = e.touches[0].clientX - rect.left - player.w / 2;
+  player.x = Math.max(0, Math.min(360, player.x));
+});
 
 /* ===== 発射（連射制限） ===== */
 let shootCool = 0;
@@ -71,20 +75,32 @@ function shoot() {
   shootCool = 15;
 
   if (player.weapon === 1) {
-    bullets.push({x:player.x+20, y:player.y});
+    bullets.push({ x: player.x + 20, y: player.y, power: 1 });
+  } else if (player.weapon === 2) {
+    bullets.push({ x: player.x + 8, y: player.y, power: 1 });
+    bullets.push({ x: player.x + 32, y: player.y, power: 1 });
   } else {
-    bullets.push({x:player.x+5, y:player.y});
-    bullets.push({x:player.x+35, y:player.y});
+    bullets.push({ x: player.x + 20, y: player.y, power: 2 });
+    bullets.push({ x: player.x + 5,  y: player.y, power: 1 });
+    bullets.push({ x: player.x + 35, y: player.y, power: 1 });
   }
 }
-document.addEventListener("keydown", e => e.code==="Space" && shoot());
-canvas.addEventListener("touchstart", () => gameOver ? restart() : shoot());
+
+/* ===== クリック操作 ===== */
+canvas.addEventListener("mousedown", () => {
+  if (gameOver) restart();
+  else shoot();
+});
+canvas.addEventListener("touchstart", () => {
+  if (gameOver) restart();
+  else shoot();
+});
 
 /* ===== 敵生成 ===== */
 setInterval(() => {
   if (!boss && !gameOver) {
     enemies.push({
-      x: Math.random()*350,
+      x: Math.random() * 350,
       y: -40,
       w: 30,
       h: 30,
@@ -101,11 +117,7 @@ function update() {
   shootCool--;
   invincible--;
 
-  if (keys.ArrowLeft) player.x -= 5;
-  if (keys.ArrowRight) player.x += 5;
-  player.x = Math.max(0, Math.min(360, player.x));
-
-  bullets.forEach(b => b.y -= 6);
+  bullets.forEach(b => b.y -= 8);
   bullets = bullets.filter(b => b.y > 0);
 
   enemyBullets.forEach(b => {
@@ -118,46 +130,46 @@ function update() {
     e.y += 2;
     e.cool--;
     if (e.cool <= 0) {
-      enemyBullets.push({x:e.x+15,y:e.y+30,dy:4});
+      enemyBullets.push({ x:e.x+15, y:e.y+30, dy:4 });
       e.cool = 80;
     }
   });
 
-  /* ===== 敵撃破 ===== */
+  /* 敵撃破 */
   enemies.forEach((e,ei)=>{
     bullets.forEach((b,bi)=>{
       if(b.x>e.x && b.x<e.x+e.w && b.y>e.y && b.y<e.y+e.h){
         enemies.splice(ei,1);
         bullets.splice(bi,1);
-        score+=10;
+        score += 10;
         enemiesKilled++;
         if(Math.random()<0.2){
-          items.push({x:e.x+10,y:e.y});
+          items.push({ x:e.x+10, y:e.y });
         }
       }
     });
   });
 
-  /* ===== ボス出現 ===== */
-  if (enemiesKilled>=20 && !boss) {
+  /* ボス出現 */
+  if (enemiesKilled >= 20 && !boss) {
     boss = {
-      x:100,y:50,w:200,h:80,
-      life: 30 + bossLevel*20,
-      cool:0
+      x: 80, y: 40, w: 240, h: 90,
+      life: 30 + bossLevel * 20,
+      cool: 0
     };
     enemies = [];
   }
 
-  /* ===== ボス処理 ===== */
+  /* ボス処理 */
   if (boss) {
     boss.cool--;
-    if (boss.cool<=0) {
+    if (boss.cool <= 0) {
       for(let i=-2;i<=2;i++){
         enemyBullets.push({
-          x:boss.x+100,
-          y:boss.y+80,
-          dx:i,
-          dy:3+bossLevel
+          x: boss.x + boss.w/2,
+          y: boss.y + boss.h,
+          dx: i,
+          dy: 3 + bossLevel
         });
       }
       boss.cool = 40;
@@ -166,31 +178,31 @@ function update() {
     bullets.forEach((b,bi)=>{
       if(b.x>boss.x && b.x<boss.x+boss.w && b.y>boss.y && b.y<boss.y+boss.h){
         bullets.splice(bi,1);
-        boss.life--;
-        score+=5;
-        if(boss.life<=0){
-          boss=null;
-          enemiesKilled=0;
+        boss.life -= b.power;
+        score += 5;
+        if(boss.life <= 0){
+          boss = null;
+          enemiesKilled = 0;
           bossLevel++;
         }
       }
     });
   }
 
-  /* ===== 被弾 ===== */
+  /* 被弾 */
   enemyBullets.forEach((b,bi)=>{
     if(invincible<=0 &&
-      b.x>player.x && b.x<player.x+player.w &&
-      b.y>player.y && b.y<player.y+player.h){
-        enemyBullets.splice(bi,1);
-        player.life--;
-        player.weapon = Math.max(1, player.weapon-1);
-        invincible = 60;
-        if(player.life<=0) gameOver=true;
+       b.x>player.x && b.x<player.x+player.w &&
+       b.y>player.y && b.y<player.y+player.h){
+      enemyBullets.splice(bi,1);
+      player.life--;
+      player.weapon = Math.max(1, player.weapon-1);
+      invincible = 60;
+      if(player.life<=0) gameOver = true;
     }
   });
 
-  /* ===== アイテム ===== */
+  /* アイテム */
   items.forEach(i=>i.y+=2);
   items.forEach((i,ii)=>{
     if(i.x>player.x && i.x<player.x+40 && i.y>player.y && i.y<player.y+40){
@@ -204,22 +216,23 @@ function update() {
 function draw() {
   ctx.clearRect(0,0,400,600);
 
-  /* 海 */
+  /* 海背景 */
   ctx.fillStyle="#003366";
   ctx.fillRect(0,bgY,400,600);
   ctx.fillRect(0,bgY-600,400,600);
 
-  /* 自機 */
+  /* 自機（無敵点滅） */
   if(invincible%10<5){
     ctx.fillStyle="cyan";
     ctx.fillRect(player.x+15,player.y,10,50);
     ctx.fillRect(player.x,player.y+20,40,20);
   }
 
-  /* 弾 */
-  ctx.fillStyle="yellow";
-  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,10));
+  /* 自機弾 */
+  ctx.fillStyle="lime";
+  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,14));
 
+  /* 敵弾 */
   ctx.fillStyle="orange";
   enemyBullets.forEach(b=>ctx.fillRect(b.x-3,b.y,6,12));
 
@@ -235,7 +248,7 @@ function draw() {
     ctx.fillStyle="darkred";
     ctx.fillRect(boss.x,boss.y,boss.w,boss.h);
     ctx.fillStyle="white";
-    ctx.fillText("BOSS HP:"+boss.life,boss.x+60,boss.y-5);
+    ctx.fillText("BOSS HP:"+boss.life,boss.x+70,boss.y-5);
   }
 
   /* アイテム */
@@ -244,15 +257,15 @@ function draw() {
 
   /* UI */
   ctx.fillStyle="white";
-  ctx.fillText("SCORE:"+score,10,20);
-  ctx.fillText("LIFE:"+player.life,10,40);
-  ctx.fillText("WEAPON:"+player.weapon,10,60);
+  ctx.fillText("SCORE: "+score,10,20);
+  ctx.fillText("LIFE: "+player.life,10,40);
+  ctx.fillText("WEAPON: "+player.weapon,10,60);
 
   if(gameOver){
     ctx.font="28px sans-serif";
     ctx.fillText("GAME OVER",90,300);
     ctx.font="16px sans-serif";
-    ctx.fillText("TAP TO RESTART",120,330);
+    ctx.fillText("CLICK TO RESTART",115,330);
   }
 }
 
@@ -264,5 +277,6 @@ function loop(){
 }
 loop();
 </script>
+
 </body>
 </html>
