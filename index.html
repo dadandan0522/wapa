@@ -2,11 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>海上シューティング</title>
+<title>海戦シューティング</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body { margin: 0; background: black; overflow: hidden; }
-canvas { display: block; margin: auto; background: #001f3f; }
+body { margin:0; background:#000; }
+canvas { display:block; margin:auto; background:#001a33; }
 </style>
 </head>
 <body>
@@ -17,215 +17,252 @@ canvas { display: block; margin: auto; background: #001f3f; }
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-//================ 状態 =================
+/* ===== 状態 ===== */
 let score = 0;
-let kills = 0;
-let bossLevel = 1;
+let enemiesKilled = 0;
 let gameOver = false;
+let invincible = 0;
+let bossLevel = 1;
+
+/* ===== 背景（海） ===== */
 let bgY = 0;
 
-//================ プレイヤー =================
+/* ===== プレイヤー ===== */
 const player = {
-  x: 180, y: 500, w: 40, h: 60,
+  x: 180, y: 500, w: 40, h: 50,
   life: 3,
-  weapon: 1,
-  cooldown: 0,
-  invincible: 0,
-  bombs: 3
+  weapon: 1
 };
 
-//================ 配列 =================
 let bullets = [];
-let enemyBullets = [];
 let enemies = [];
+let enemyBullets = [];
 let items = [];
 let boss = null;
 
-//================ 入力 =================
+/* ===== 入力 ===== */
 const keys = {};
-document.addEventListener("keydown", e => {
-  if (e.code === "Space") shoot();
-  if (e.code === "KeyB") useBomb();
-  if (gameOver && e.code === "Enter") restart();
+document.addEventListener("keydown", e => keys[e.code] = true);
+document.addEventListener("keyup", e => keys[e.code] = false);
+canvas.addEventListener("touchmove", e => {
+  const r = canvas.getBoundingClientRect();
+  player.x = e.touches[0].clientX - r.left - player.w/2;
 });
 
-//================ 発射 =================
-function shoot() {
-  if (gameOver || player.cooldown > 0) return;
-
-  const cx = player.x + player.w / 2;
-  const patterns = {
-    1: [0],
-    2: [-0.1, 0.1],
-    3: [-0.2, 0, 0.2],
-    4: [-0.4, -0.2, 0, 0.2, 0.4]
-  };
-
-  patterns[player.weapon].forEach(a => {
-    bullets.push({
-      x: cx,
-      y: player.y,
-      vx: Math.sin(a) * 4,
-      vy: -10
-    });
-  });
-
-  player.cooldown = 15;
-}
-
-//================ ボム =================
-function useBomb() {
-  if (gameOver || player.bombs <= 0) return;
-
-  player.bombs--;
-  player.invincible = 60;
-  enemyBullets = [];
-  enemies.forEach(() => score += 200);
-  enemies = [];
-
-  if (boss) {
-    boss.hp -= 5;
-    if (boss.hp <= 0) {
-      boss = null;
-      bossLevel++;
-      kills = 0;
-    }
-  }
-}
-
-//================ 敵生成 =================
-setInterval(() => {
-  if (!gameOver && !boss) {
-    enemies.push({
-      x: Math.random() * 360,
-      y: -40,
-      w: 30,
-      h: 40,
-      cool: 80
-    });
-  }
-}, 800);
-
-//================ 更新 =================
-function update() {
-  if (gameOver) return;
-
-  bgY = (bgY + 2) % 600;
-
-  if (keys["ArrowLeft"]) player.x -= 5;
-  if (keys["ArrowRight"]) player.x += 5;
-  player.x = Math.max(0, Math.min(360, player.x));
-
-  if (player.cooldown > 0) player.cooldown--;
-  if (player.invincible > 0) player.invincible--;
-
-  bullets.forEach(b => { b.x += b.vx; b.y += b.vy; });
-  bullets = bullets.filter(b => b.y > -20);
-
-  enemyBullets.forEach(b => {
-    b.x += b.vx;
-    b.y += b.vy;
-  });
-
-  //================ 敵の狙い撃ち =================
-  enemies.forEach(e => {
-    e.y += 2;
-    e.cool--;
-
-    if (e.cool <= 0) {
-      const ex = e.x + e.w / 2;
-      const ey = e.y + e.h;
-      const px = player.x + player.w / 2;
-      const py = player.y;
-
-      const dx = px - ex;
-      const dy = py - ey;
-      const len = Math.hypot(dx, dy);
-
-      enemyBullets.push({
-        x: ex,
-        y: ey,
-        vx: dx / len * 3,
-        vy: dy / len * 3
-      });
-
-      e.cool = 80;
-    }
-  });
-
-  //================ 被弾 =================
-  enemyBullets.forEach((b, bi) => {
-    if (player.invincible === 0 && hit(b, player)) {
-      enemyBullets.splice(bi, 1);
-      player.life--;
-      player.weapon = Math.max(1, player.weapon - 1);
-      player.invincible = 90;
-      if (player.life <= 0) gameOver = true;
-    }
-  });
-}
-
-//================ 当たり判定 =================
-function hit(a, b) {
-  return a.x > b.x && a.x < b.x + (b.w || 20) &&
-         a.y > b.y && a.y < b.y + (b.h || 20);
-}
-
-//================ 描画 =================
-function draw() {
-  ctx.clearRect(0, 0, 400, 600);
-
-  ctx.fillStyle = "#003366";
-  ctx.fillRect(0, bgY, 400, 600);
-  ctx.fillRect(0, bgY - 600, 400, 600);
-
-  if (player.invincible === 0 || Math.floor(player.invincible / 5) % 2 === 0) {
-    ctx.fillStyle = "cyan";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-  }
-
-  ctx.fillStyle = "yellow";
-  bullets.forEach(b => ctx.fillRect(b.x - 2, b.y, 4, 10));
-
-  ctx.fillStyle = "red";
-  enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
-
-  ctx.fillStyle = "orange";
-  enemyBullets.forEach(b => ctx.fillRect(b.x - 3, b.y, 6, 10));
-
-  ctx.fillStyle = "white";
-  ctx.fillText(`LIFE: ${player.life}`, 10, 20);
-  ctx.fillText(`WEAPON: Lv${player.weapon}`, 10, 40);
-  ctx.fillText(`BOMB: ${player.bombs}`, 10, 60);
-
-  if (gameOver) ctx.fillText("GAME OVER", 150, 300);
-}
-
-//================ リスタート =================
+/* ===== リスタート ===== */
 function restart() {
   score = 0;
-  kills = 0;
+  enemiesKilled = 0;
   bossLevel = 1;
   bullets = [];
-  enemyBullets = [];
   enemies = [];
+  enemyBullets = [];
   items = [];
   boss = null;
   player.life = 3;
   player.weapon = 1;
-  player.bombs = 3;
-  player.invincible = 0;
   gameOver = false;
 }
 
-//================ ループ =================
-function loop() {
+/* ===== 発射（連射制限） ===== */
+let shootCool = 0;
+function shoot() {
+  if (shootCool > 0 || gameOver) return;
+  shootCool = 15;
+
+  if (player.weapon === 1) {
+    bullets.push({x:player.x+20, y:player.y});
+  } else {
+    bullets.push({x:player.x+5, y:player.y});
+    bullets.push({x:player.x+35, y:player.y});
+  }
+}
+document.addEventListener("keydown", e => e.code==="Space" && shoot());
+canvas.addEventListener("touchstart", () => gameOver ? restart() : shoot());
+
+/* ===== 敵生成 ===== */
+setInterval(() => {
+  if (!boss && !gameOver) {
+    enemies.push({
+      x: Math.random()*350,
+      y: -40,
+      w: 30,
+      h: 30,
+      cool: 60
+    });
+  }
+}, 800);
+
+/* ===== 更新 ===== */
+function update() {
+  if (gameOver) return;
+
+  bgY = (bgY + 1) % 600;
+  shootCool--;
+  invincible--;
+
+  if (keys.ArrowLeft) player.x -= 5;
+  if (keys.ArrowRight) player.x += 5;
+  player.x = Math.max(0, Math.min(360, player.x));
+
+  bullets.forEach(b => b.y -= 6);
+  bullets = bullets.filter(b => b.y > 0);
+
+  enemyBullets.forEach(b => {
+    b.y += b.dy;
+    b.x += b.dx || 0;
+  });
+  enemyBullets = enemyBullets.filter(b => b.y < 600 && b.x>-10 && b.x<410);
+
+  enemies.forEach(e => {
+    e.y += 2;
+    e.cool--;
+    if (e.cool <= 0) {
+      enemyBullets.push({x:e.x+15,y:e.y+30,dy:4});
+      e.cool = 80;
+    }
+  });
+
+  /* ===== 敵撃破 ===== */
+  enemies.forEach((e,ei)=>{
+    bullets.forEach((b,bi)=>{
+      if(b.x>e.x && b.x<e.x+e.w && b.y>e.y && b.y<e.y+e.h){
+        enemies.splice(ei,1);
+        bullets.splice(bi,1);
+        score+=10;
+        enemiesKilled++;
+        if(Math.random()<0.2){
+          items.push({x:e.x+10,y:e.y});
+        }
+      }
+    });
+  });
+
+  /* ===== ボス出現 ===== */
+  if (enemiesKilled>=20 && !boss) {
+    boss = {
+      x:100,y:50,w:200,h:80,
+      life: 30 + bossLevel*20,
+      cool:0
+    };
+    enemies = [];
+  }
+
+  /* ===== ボス処理 ===== */
+  if (boss) {
+    boss.cool--;
+    if (boss.cool<=0) {
+      for(let i=-2;i<=2;i++){
+        enemyBullets.push({
+          x:boss.x+100,
+          y:boss.y+80,
+          dx:i,
+          dy:3+bossLevel
+        });
+      }
+      boss.cool = 40;
+    }
+
+    bullets.forEach((b,bi)=>{
+      if(b.x>boss.x && b.x<boss.x+boss.w && b.y>boss.y && b.y<boss.y+boss.h){
+        bullets.splice(bi,1);
+        boss.life--;
+        score+=5;
+        if(boss.life<=0){
+          boss=null;
+          enemiesKilled=0;
+          bossLevel++;
+        }
+      }
+    });
+  }
+
+  /* ===== 被弾 ===== */
+  enemyBullets.forEach((b,bi)=>{
+    if(invincible<=0 &&
+      b.x>player.x && b.x<player.x+player.w &&
+      b.y>player.y && b.y<player.y+player.h){
+        enemyBullets.splice(bi,1);
+        player.life--;
+        player.weapon = Math.max(1, player.weapon-1);
+        invincible = 60;
+        if(player.life<=0) gameOver=true;
+    }
+  });
+
+  /* ===== アイテム ===== */
+  items.forEach(i=>i.y+=2);
+  items.forEach((i,ii)=>{
+    if(i.x>player.x && i.x<player.x+40 && i.y>player.y && i.y<player.y+40){
+      items.splice(ii,1);
+      player.weapon = Math.min(3, player.weapon+1);
+    }
+  });
+}
+
+/* ===== 描画 ===== */
+function draw() {
+  ctx.clearRect(0,0,400,600);
+
+  /* 海 */
+  ctx.fillStyle="#003366";
+  ctx.fillRect(0,bgY,400,600);
+  ctx.fillRect(0,bgY-600,400,600);
+
+  /* 自機 */
+  if(invincible%10<5){
+    ctx.fillStyle="cyan";
+    ctx.fillRect(player.x+15,player.y,10,50);
+    ctx.fillRect(player.x,player.y+20,40,20);
+  }
+
+  /* 弾 */
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,10));
+
+  ctx.fillStyle="orange";
+  enemyBullets.forEach(b=>ctx.fillRect(b.x-3,b.y,6,12));
+
+  /* 敵 */
+  ctx.fillStyle="gray";
+  enemies.forEach(e=>{
+    ctx.fillRect(e.x+10,e.y,10,30);
+    ctx.fillRect(e.x,e.y+10,30,20);
+  });
+
+  /* ボス */
+  if(boss){
+    ctx.fillStyle="darkred";
+    ctx.fillRect(boss.x,boss.y,boss.w,boss.h);
+    ctx.fillStyle="white";
+    ctx.fillText("BOSS HP:"+boss.life,boss.x+60,boss.y-5);
+  }
+
+  /* アイテム */
+  ctx.fillStyle="lime";
+  items.forEach(i=>ctx.fillRect(i.x,i.y,10,10));
+
+  /* UI */
+  ctx.fillStyle="white";
+  ctx.fillText("SCORE:"+score,10,20);
+  ctx.fillText("LIFE:"+player.life,10,40);
+  ctx.fillText("WEAPON:"+player.weapon,10,60);
+
+  if(gameOver){
+    ctx.font="28px sans-serif";
+    ctx.fillText("GAME OVER",90,300);
+    ctx.font="16px sans-serif";
+    ctx.fillText("TAP TO RESTART",120,330);
+  }
+}
+
+/* ===== ループ ===== */
+function loop(){
   update();
   draw();
   requestAnimationFrame(loop);
 }
 loop();
 </script>
-
 </body>
 </html>
