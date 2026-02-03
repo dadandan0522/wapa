@@ -135,7 +135,7 @@ function update() {
     }
   });
 
-  /* 敵撃破 */
+  /* 敵撃破＋アイテム */
   enemies.forEach((e,ei)=>{
     bullets.forEach((b,bi)=>{
       if(b.x>e.x && b.x<e.x+e.w && b.y>e.y && b.y<e.y+e.h){
@@ -143,8 +143,12 @@ function update() {
         bullets.splice(bi,1);
         score += 10;
         enemiesKilled++;
-        if(Math.random()<0.2){
-          items.push({ x:e.x+10, y:e.y });
+
+        const r = Math.random();
+        if (r < 0.15) {
+          items.push({ x:e.x+10, y:e.y, type:"weapon" });
+        } else if (r < 0.25) {
+          items.push({ x:e.x+10, y:e.y, type:"life" });
         }
       }
     });
@@ -202,12 +206,17 @@ function update() {
     }
   });
 
-  /* アイテム */
-  items.forEach(i=>i.y+=2);
+  /* アイテム取得 */
+  items.forEach(i => i.y += 2);
   items.forEach((i,ii)=>{
     if(i.x>player.x && i.x<player.x+40 && i.y>player.y && i.y<player.y+40){
+      if(i.type === "weapon"){
+        player.weapon = Math.min(3, player.weapon + 1);
+      }
+      if(i.type === "life"){
+        player.life = Math.min(3, player.life + 1);
+      }
       items.splice(ii,1);
-      player.weapon = Math.min(3, player.weapon+1);
     }
   });
 }
@@ -252,8 +261,16 @@ function draw() {
   }
 
   /* アイテム */
-  ctx.fillStyle="lime";
-  items.forEach(i=>ctx.fillRect(i.x,i.y,10,10));
+  items.forEach(i=>{
+    if(i.type==="weapon"){
+      ctx.fillStyle="lime";
+      ctx.fillRect(i.x,i.y,10,10);
+    } else {
+      ctx.fillStyle="green";
+      ctx.fillRect(i.x+4,i.y,4,12);
+      ctx.fillRect(i.x,i.y+4,12,4);
+    }
+  });
 
   /* UI */
   ctx.fillStyle="white";
